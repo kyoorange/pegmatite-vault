@@ -1,0 +1,66 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+junit.xml
+htmlcov/
+*.egg-info/
+.mypy_cache/
+.hypothesis/
+/backend/build/
+/backend/dist/
+
+# Node.js
+node_modules/
+frontend/dist/
+frontend/coverage/
+playwright-report/
+test-results/
+.vite/
+.cache/
+/frontend/blob-report/
+
+# Local storage and database data
+storage/images/*
+!storage/images/.gitkeep
+storage/runtime-settings.json
+storage/runtime-settings.tmp
+storage/imports/
+storage/integration-test/
+postgres-data/
+backups/
+*.dump
+*.backup
+pegmatite-vault-backup-*.zip
+pegmatite-vault-export-*.zip
+.pegmatite-vault-backup-*-staging/
+pre-restore-*/
+
+# Logs and temporary files
+*.log
+*.pid
+*.pid.lock
+tmp/
+temp/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

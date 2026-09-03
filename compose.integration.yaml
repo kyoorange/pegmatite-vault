@@ -1,0 +1,21 @@
+services:
+  db-test:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: pegmatite_vault_test
+      POSTGRES_USER: pegmatite_test
+      POSTGRES_PASSWORD: pegmatite_test
+    ports:
+      - "55433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U pegmatite_test -d pegmatite_vault_test",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s

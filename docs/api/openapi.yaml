@@ -1,0 +1,1336 @@
+openapi: 3.1.0
+info:
+  title: Pegmatite Vault API
+  version: 0.1.0
+  description: 鉱物標本コレクションを管理するローカルWebアプリケーションAPI
+servers:
+  - url: http://localhost:8000/api
+    description: ローカル開発環境
+tags:
+  - name: System
+  - name: Specimens
+  - name: Images
+  - name: Minerals
+  - name: Mineral classes
+  - name: Localities
+  - name: Acquisition methods
+  - name: Settings
+  - name: Data management
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: 稼働状態を取得
+      operationId: getHealth
+      responses:
+        "200":
+          description: APIとDBが利用可能
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /options/minerals:
+    get:
+      tags: [Minerals]
+      summary: 標本フォーム用の鉱物選択肢を取得
+      operationId: listMineralOptions
+      responses:
+        "200":
+          description: 鉱物選択肢
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MineralSummary"
+
+  /options/mineral-classes:
+    get:
+      tags: [Mineral classes]
+      summary: 鉱物分類の選択肢を取得
+      operationId: listMineralClassOptions
+      responses:
+        "200":
+          description: 鉱物分類選択肢
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MineralClass"
+
+  /options/localities:
+    get:
+      tags: [Localities]
+      summary: 標本フォーム用の採集地選択肢を取得
+      operationId: listLocalityOptions
+      responses:
+        "200":
+          description: 採集地選択肢
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LocalitySummary"
+
+  /options/acquisition-methods:
+    get:
+      tags: [Acquisition methods]
+      summary: 標本フォーム用の入手経路選択肢を取得
+      operationId: listAcquisitionMethodOptions
+      responses:
+        "200":
+          description: 入手経路選択肢
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AcquisitionMethod"
+
+  /specimens:
+    get:
+      tags: [Specimens]
+      summary: 標本一覧を取得
+      operationId: listSpecimens
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: q
+          in: query
+          description: 標本番号、標本名、鉱物名、採集地名の部分一致検索
+          schema: { type: string }
+        - name: mineral_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: locality_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: acquisition_method_id
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: favorite
+          in: query
+          schema: { type: boolean }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, specimen_no, specimen_name]
+            default: created_at
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        "200":
+          description: 標本一覧
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecimenPage"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    post:
+      tags: [Specimens]
+      summary: 標本を登録
+      description: specimen_no未指定時は同じ採集地の最大値+1をAPIが割り当てる。
+      operationId: createSpecimen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecimenCreate"
+      responses:
+        "201":
+          description: 登録した標本
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecimenDetail"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /specimens/{specimen_id}:
+    parameters:
+      - $ref: "#/components/parameters/SpecimenId"
+    get:
+      tags: [Specimens]
+      summary: 標本詳細を取得
+      operationId: getSpecimen
+      responses:
+        "200":
+          description: 標本詳細
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecimenDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Specimens]
+      summary: 標本を更新
+      operationId: updateSpecimen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecimenUpdate"
+      responses:
+        "200":
+          description: 更新した標本
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecimenDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Specimens]
+      summary: 標本を削除
+      description: 関連画像は削除せず論理アーカイブする。
+      operationId: deleteSpecimen
+      responses:
+        "204":
+          description: 削除成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /specimens/{specimen_id}/images:
+    parameters:
+      - $ref: "#/components/parameters/SpecimenId"
+    post:
+      tags: [Images]
+      summary: 標本画像を追加
+      operationId: uploadSpecimenImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                caption:
+                  type: [string, "null"]
+      responses:
+        "201":
+          description: 追加した画像
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Image"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /specimens/{specimen_id}/images/order:
+    patch:
+      tags: [Images]
+      summary: 標本画像を並べ替え
+      operationId: reorderSpecimenImages
+      parameters:
+        - $ref: "#/components/parameters/SpecimenId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image_ids]
+              properties:
+                image_ids:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: 並べ替え後の画像
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Image"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /images/{image_id}:
+    parameters:
+      - $ref: "#/components/parameters/ImageId"
+    patch:
+      tags: [Images]
+      summary: 画像メタデータを更新
+      operationId: updateImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                caption:
+                  type: [string, "null"]
+                  maxLength: 255
+      responses:
+        "200":
+          description: 更新した画像
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Image"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Images]
+      summary: 画像を論理アーカイブ
+      operationId: archiveImage
+      responses:
+        "204":
+          description: アーカイブ成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /images/{image_id}/content:
+    get:
+      tags: [Images]
+      summary: 画像ファイルを取得
+      operationId: getImageContent
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+        - name: variant
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [original, display, thumbnail]
+      responses:
+        "200":
+          description: 画像バイナリ
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /archived-images:
+    get:
+      tags: [Images]
+      summary: アーカイブ画像一覧を取得
+      operationId: listArchivedImages
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: アーカイブ画像一覧
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImagePage"
+
+  /archived-images/{image_id}/content:
+    get:
+      tags: [Images]
+      summary: アーカイブ画像のプレビューを取得
+      operationId: getArchivedImageContent
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+        - name: variant
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [original, display, thumbnail]
+      responses:
+        "200":
+          description: 画像バイナリ
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /images/{image_id}/restore:
+    post:
+      tags: [Images]
+      summary: アーカイブ画像を標本へ復元
+      operationId: restoreImage
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [specimen_id]
+              properties:
+                specimen_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: 復元した画像
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Image"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /images/{image_id}/permanent:
+    delete:
+      tags: [Images]
+      summary: アーカイブ画像を完全削除
+      description: archived状態の画像だけを対象とし、DBレコードと全ファイルを削除する。
+      operationId: permanentlyDeleteImage
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+      responses:
+        "204":
+          description: 完全削除成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /minerals:
+    get:
+      tags: [Minerals]
+      summary: 鉱物一覧を取得
+      operationId: listMinerals
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: q
+          in: query
+          description: 和名、英名、化学式の部分一致検索
+          schema: { type: string }
+        - name: mineral_class_id
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [japanese_name, english_name, specimen_count]
+            default: japanese_name
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        "200":
+          description: 鉱物一覧
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineralPage"
+    post:
+      tags: [Minerals]
+      summary: 鉱物を登録
+      operationId: createMineral
+      requestBody:
+        $ref: "#/components/requestBodies/MineralWrite"
+      responses:
+        "201":
+          description: 登録した鉱物
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mineral"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /minerals/{mineral_id}:
+    parameters:
+      - $ref: "#/components/parameters/MineralId"
+    get:
+      tags: [Minerals]
+      summary: 鉱物詳細を取得
+      operationId: getMineral
+      responses:
+        "200":
+          description: 鉱物詳細
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mineral"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Minerals]
+      summary: 鉱物を更新
+      operationId: updateMineral
+      requestBody:
+        $ref: "#/components/requestBodies/MineralWrite"
+      responses:
+        "200":
+          description: 更新した鉱物
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mineral"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Minerals]
+      summary: 鉱物を削除
+      operationId: deleteMineral
+      responses:
+        "204":
+          description: 削除成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /minerals/{mineral_id}/specimens:
+    get:
+      tags: [Minerals]
+      summary: 鉱物に関連する標本を取得
+      operationId: listMineralSpecimens
+      parameters:
+        - $ref: "#/components/parameters/MineralId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: 関連標本
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecimenPage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /localities:
+    get:
+      tags: [Localities]
+      summary: 採集地一覧を取得
+      operationId: listLocalities
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 採集地一覧
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalityPage"
+    post:
+      tags: [Localities]
+      summary: 採集地を登録
+      operationId: createLocality
+      requestBody:
+        $ref: "#/components/requestBodies/LocalityWrite"
+      responses:
+        "201":
+          description: 登録した採集地
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Locality"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /localities/{locality_id}:
+    parameters:
+      - $ref: "#/components/parameters/LocalityId"
+    get:
+      tags: [Localities]
+      summary: 採集地詳細を取得
+      operationId: getLocality
+      responses:
+        "200":
+          description: 採集地詳細
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Locality"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Localities]
+      summary: 採集地を更新
+      operationId: updateLocality
+      requestBody:
+        $ref: "#/components/requestBodies/LocalityWrite"
+      responses:
+        "200":
+          description: 更新した採集地
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Locality"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Localities]
+      summary: 採集地を削除
+      operationId: deleteLocality
+      responses:
+        "204":
+          description: 削除成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /localities/{locality_id}/specimens:
+    get:
+      tags: [Localities]
+      summary: 採集地に関連する標本を取得
+      operationId: listLocalitySpecimens
+      parameters:
+        - $ref: "#/components/parameters/LocalityId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: 関連標本
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecimenPage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /mineral-classes:
+    get:
+      tags: [Mineral classes]
+      summary: 鉱物分類一覧を取得
+      operationId: listMineralClasses
+      responses:
+        "200":
+          description: 鉱物分類一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MineralClass"
+    post:
+      tags: [Mineral classes]
+      summary: 鉱物分類を登録
+      operationId: createMineralClass
+      requestBody:
+        $ref: "#/components/requestBodies/NamedMasterWrite"
+      responses:
+        "201":
+          description: 登録した鉱物分類
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineralClass"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /mineral-classes/{mineral_class_id}:
+    parameters:
+      - $ref: "#/components/parameters/MineralClassId"
+    get:
+      tags: [Mineral classes]
+      summary: 鉱物分類を取得
+      operationId: getMineralClass
+      responses:
+        "200":
+          description: 鉱物分類
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineralClass"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Mineral classes]
+      summary: 鉱物分類を更新
+      operationId: updateMineralClass
+      requestBody:
+        $ref: "#/components/requestBodies/NamedMasterWrite"
+      responses:
+        "200":
+          description: 更新した鉱物分類
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineralClass"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Mineral classes]
+      summary: 鉱物分類を削除
+      operationId: deleteMineralClass
+      responses:
+        "204":
+          description: 削除成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /acquisition-methods:
+    get:
+      tags: [Acquisition methods]
+      summary: 入手経路一覧を取得
+      operationId: listAcquisitionMethods
+      responses:
+        "200":
+          description: 入手経路一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AcquisitionMethod"
+    post:
+      tags: [Acquisition methods]
+      summary: 入手経路を登録
+      operationId: createAcquisitionMethod
+      requestBody:
+        $ref: "#/components/requestBodies/NamedMasterWrite"
+      responses:
+        "201":
+          description: 登録した入手経路
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcquisitionMethod"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /acquisition-methods/{acquisition_method_id}:
+    parameters:
+      - $ref: "#/components/parameters/AcquisitionMethodId"
+    get:
+      tags: [Acquisition methods]
+      summary: 入手経路を取得
+      operationId: getAcquisitionMethod
+      responses:
+        "200":
+          description: 入手経路
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcquisitionMethod"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Acquisition methods]
+      summary: 入手経路を更新
+      operationId: updateAcquisitionMethod
+      requestBody:
+        $ref: "#/components/requestBodies/NamedMasterWrite"
+      responses:
+        "200":
+          description: 更新した入手経路
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcquisitionMethod"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Acquisition methods]
+      summary: 入手経路を削除
+      operationId: deleteAcquisitionMethod
+      responses:
+        "204":
+          description: 削除成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /settings/status:
+    get:
+      tags: [Settings]
+      summary: アプリケーション設定と状態を取得
+      operationId: getSystemStatus
+      responses:
+        "200":
+          description: 設定と状態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+
+  /settings/storage/validate:
+    post:
+      tags: [Settings]
+      summary: 画像保存先の変更可否を検証
+      operationId: validateImageStorageTarget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: 移行前検証結果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageMigrationPreview"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /settings/storage/migrate:
+    post:
+      tags: [Settings]
+      summary: 画像をコピー・照合して保存先を変更
+      description: 全ファイルのSHA-256確認後に切り替える。旧保存先は削除しない。
+      operationId: migrateImageStorage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "200":
+          description: 移行結果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageMigrationPreview"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /data/export:
+    post:
+      tags: [Data management]
+      summary: CSVデータをエクスポート
+      operationId: exportData
+      responses:
+        "200":
+          description: テーブル別CSVを格納したZIP
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+
+  /data/import/validate:
+    post:
+      tags: [Data management]
+      summary: CSVインポート内容を検証
+      operationId: validateImport
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: 検証結果。commit_tokenは検証成功時のみ返す。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportValidation"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /data/import/commit:
+    post:
+      tags: [Data management]
+      summary: 検証済みCSVをインポート
+      operationId: commitImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [commit_token]
+              properties:
+                commit_token: { type: string, format: uuid }
+      responses:
+        "200":
+          description: インポート結果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 24 }
+    SpecimenId:
+      name: specimen_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ImageId:
+      name: image_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MineralId:
+      name: mineral_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LocalityId:
+      name: locality_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MineralClassId:
+      name: mineral_class_id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    AcquisitionMethodId:
+      name: acquisition_method_id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+
+  requestBodies:
+    MineralWrite:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MineralWrite"
+    LocalityWrite:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LocalityWrite"
+    NamedMasterWrite:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NamedMasterWrite"
+
+  responses:
+    NotFound:
+      description: 対象が存在しない
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: 現在状態または関連データと競合する
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: 入力値が不正
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: アップロード上限を超過
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnsupportedMediaType:
+      description: 未対応の画像形式
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: DBまたは必須サービスを利用できない
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    Health:
+      type: object
+      required: [status, database, image_storage]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        database: { type: string, enum: [ok] }
+        image_storage: { type: string, enum: [ok, unavailable] }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [resource_not_found] }
+            message: { type: string }
+            details:
+              type: [object, array, "null"]
+
+    PageMeta:
+      type: object
+      required: [page, page_size, total]
+      properties:
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+
+    SpecimenCreate:
+      type: object
+      required: [specimen_name]
+      properties:
+        specimen_no: { type: [integer, "null"], minimum: 1 }
+        specimen_name: { type: string, minLength: 1, maxLength: 255 }
+        locality_id: { type: [string, "null"], format: uuid }
+        acquisition_method_id: { type: [integer, "null"], minimum: 1 }
+        collection_date: { type: [string, "null"], format: date }
+        features: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+        favorite: { type: boolean, default: false }
+        mineral_ids:
+          type: array
+          uniqueItems: true
+          default: []
+          items: { type: string, format: uuid }
+
+    SpecimenUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        specimen_no: { type: integer, minimum: 1 }
+        specimen_name: { type: string, minLength: 1, maxLength: 255 }
+        locality_id: { type: [string, "null"], format: uuid }
+        acquisition_method_id: { type: [integer, "null"], minimum: 1 }
+        collection_date: { type: [string, "null"], format: date }
+        features: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+        favorite: { type: boolean }
+        mineral_ids:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+
+    SpecimenSummary:
+      type: object
+      required: [id, specimen_no, specimen_name, favorite, mineral_names, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        specimen_no: { type: integer }
+        specimen_name: { type: string }
+        locality:
+          oneOf:
+            - $ref: "#/components/schemas/LocalitySummary"
+            - type: "null"
+        favorite: { type: boolean }
+        mineral_names:
+          type: array
+          items: { type: string }
+        thumbnail_image_id: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SpecimenDetail:
+      allOf:
+        - $ref: "#/components/schemas/SpecimenSummary"
+        - type: object
+          required: [minerals, images]
+          properties:
+            acquisition_method:
+              oneOf:
+                - $ref: "#/components/schemas/AcquisitionMethod"
+                - type: "null"
+            collection_date: { type: [string, "null"], format: date }
+            features: { type: [string, "null"] }
+            note: { type: [string, "null"] }
+            minerals:
+              type: array
+              items:
+                $ref: "#/components/schemas/MineralSummary"
+            images:
+              type: array
+              items:
+                $ref: "#/components/schemas/Image"
+
+    SpecimenPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/SpecimenSummary"
+
+    Image:
+      type: object
+      required:
+        [id, original_filename, media_type, file_size, sort_order, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        specimen_id: { type: [string, "null"], format: uuid }
+        archived_from_specimen_id: { type: [string, "null"], format: uuid }
+        original_filename: { type: string }
+        media_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        file_size: { type: integer, minimum: 0 }
+        caption: { type: [string, "null"] }
+        sort_order: { type: integer, minimum: 0 }
+        status: { type: string, enum: [active, archived] }
+        archived_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    ImagePage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Image"
+
+    MineralWrite:
+      type: object
+      required: [japanese_name]
+      properties:
+        japanese_name: { type: string, minLength: 1, maxLength: 255 }
+        english_name: { type: [string, "null"], maxLength: 255 }
+        formula: { type: [string, "null"], maxLength: 255 }
+        crystal_system: { type: [string, "null"], maxLength: 100 }
+        mineral_class_id: { type: [integer, "null"], minimum: 1 }
+        description: { type: [string, "null"] }
+
+    MineralSummary:
+      type: object
+      required: [id, japanese_name]
+      properties:
+        id: { type: string, format: uuid }
+        japanese_name: { type: string }
+        english_name: { type: [string, "null"] }
+        formula: { type: [string, "null"] }
+
+    Mineral:
+      allOf:
+        - $ref: "#/components/schemas/MineralSummary"
+        - type: object
+          required: [specimen_count]
+          properties:
+            crystal_system: { type: [string, "null"] }
+            mineral_class:
+              oneOf:
+                - $ref: "#/components/schemas/MineralClass"
+                - type: "null"
+            description: { type: [string, "null"] }
+            specimen_count: { type: integer, minimum: 0 }
+
+    MineralPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Mineral"
+
+    MineralClass:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        description: { type: [string, "null"] }
+
+    LocalityWrite:
+      type: object
+      required: [locality_name]
+      properties:
+        locality_name: { type: string, minLength: 1, maxLength: 255 }
+        alias_name: { type: [string, "null"], maxLength: 255 }
+        latitude: { type: [number, "null"], minimum: -90, maximum: 90 }
+        longitude: { type: [number, "null"], minimum: -180, maximum: 180 }
+        note: { type: [string, "null"] }
+
+    LocalitySummary:
+      type: object
+      required: [id, locality_name]
+      properties:
+        id: { type: string, format: uuid }
+        locality_name: { type: string }
+        alias_name: { type: [string, "null"] }
+
+    Locality:
+      allOf:
+        - $ref: "#/components/schemas/LocalitySummary"
+        - type: object
+          required: [specimen_count]
+          properties:
+            latitude: { type: [number, "null"] }
+            longitude: { type: [number, "null"] }
+            note: { type: [string, "null"] }
+            specimen_count: { type: integer, minimum: 0 }
+
+    LocalityPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Locality"
+
+    NamedMasterWrite:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: [string, "null"] }
+
+    AcquisitionMethod:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        description: { type: [string, "null"] }
+
+    ImageStorageStatus:
+      type: object
+      required:
+        [path, writable, used_bytes, free_bytes, active_image_count, archived_image_count]
+      properties:
+        path: { type: string }
+        writable: { type: boolean }
+        used_bytes: { type: integer, minimum: 0 }
+        free_bytes: { type: integer, minimum: 0 }
+        active_image_count: { type: integer, minimum: 0 }
+        archived_image_count: { type: integer, minimum: 0 }
+
+    StorageMigrationPreview:
+      type: object
+      required:
+        [source_path, target_path, file_count, total_bytes, free_bytes, same_path, ready, issues]
+      properties:
+        source_path: { type: string }
+        target_path: { type: string }
+        file_count: { type: integer, minimum: 0 }
+        total_bytes: { type: integer, minimum: 0 }
+        free_bytes: { type: integer, minimum: 0 }
+        same_path: { type: boolean }
+        ready: { type: boolean }
+        issues:
+          type: array
+          items: { type: string }
+
+    AppSettings:
+      type: object
+      required: [version, database, image_storage]
+      properties:
+        version: { type: string }
+        database: { type: string, enum: [ok, unavailable] }
+        image_storage:
+          $ref: "#/components/schemas/ImageStorageStatus"
+
+    ImportIssue:
+      type: object
+      required: [file, row, code, message]
+      properties:
+        file: { type: string }
+        row: { type: integer, minimum: 1 }
+        field: { type: [string, "null"] }
+        code: { type: string }
+        message: { type: string }
+
+    ImportValidation:
+      type: object
+      required: [valid, issues, preview]
+      properties:
+        valid: { type: boolean }
+        commit_token: { type: [string, "null"], format: uuid }
+        expires_at: { type: [string, "null"], format: date-time }
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportIssue"
+        preview:
+          $ref: "#/components/schemas/ImportResult"
+
+    ImportResult:
+      type: object
+      required: [created, updated, skipped]
+      properties:
+        created: { type: integer, minimum: 0 }
+        updated: { type: integer, minimum: 0 }
+        skipped: { type: integer, minimum: 0 }
